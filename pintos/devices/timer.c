@@ -20,11 +20,16 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
+
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+
+//함수 선언, 변수 선언 아님, intr_handler_func 가 함수이기 때문
 static intr_handler_func timer_interrupt;
+
+
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
@@ -42,7 +47,7 @@ timer_init (void) {
 	outb (0x40, count & 0xff);
 	outb (0x40, count >> 8);
 
-	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+	intr_register_ext(0x20, timer_interrupt, "8254 Timer");
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -73,28 +78,31 @@ timer_calibrate (void) {
 /* Returns the number of timer ticks since the OS booted. */
 int64_t
 timer_ticks (void) {
+	//인터럽트를 끕니다, 타이머 인터럽트가 끼어들 수 없음, intr_disable은 끄기 전 상태 반환
+	//enum intr_level은 INTR_ON과 INTR_OFF 두 값 중 하나를 가지는 타입입니다.
 	enum intr_level old_level = intr_disable ();
+	//t에 ticks 복사, 인터럽트를 껐으므로 변할 수 없음
 	int64_t t = ticks;
-	intr_set_level (old_level);
-	barrier ();
+	intr_set_level(old_level);
+	barrier();
 	return t;
 }
 
 /* Returns the number of timer ticks elapsed since THEN, which
    should be a value once returned by timer_ticks(). */
 int64_t
-timer_elapsed (int64_t then) {
-	return timer_ticks () - then;
+timer_elapsed(int64_t then) {
+	return timer_ticks() - then;
 }
 
 /* Suspends execution for approximately TICKS timer ticks. */
-void
-timer_sleep (int64_t ticks) {
+void timer_sleep (int64_t ticks) {
+	if (ticks == 0 || ticks < 0) return;
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	while (timer_elapsed(start) < ticks)
+		thread_yield();
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -175,12 +183,12 @@ real_time_sleep (int64_t num, int32_t denom) {
 		/* We're waiting for at least one full timer tick.  Use
 		   timer_sleep() because it will yield the CPU to other
 		   processes. */
-		timer_sleep (ticks);
+		timer_sleep(ticks);
 	} else {
 		/* Otherwise, use a busy-wait loop for more accurate
 		   sub-tick timing.  We scale the numerator and denominator
 		   down by 1000 to avoid the possibility of overflow. */
 		ASSERT (denom % 1000 == 0);
-		busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
+		busy_wait(loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000));
 	}
 }

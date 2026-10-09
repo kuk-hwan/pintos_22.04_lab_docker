@@ -207,8 +207,11 @@ intr_init (void) {
    privilege level DPL.  Names the interrupt NAME for debugging
    purposes.  The interrupt handler will be invoked with
    interrupt status set to LEVEL. */
-static void
-register_handler (uint8_t vec_no, int dpl, enum intr_level level,
+
+//IDT 설정: 하드웨어용 표에 "타이머 (벡터 0x20)이 오면 intr_stubs[0x20](어셈블리 진입점)으로 점프하라"고 적습니다.
+//핸들러 테이블 등록: Pintos 내부 배열 intr_handlers[0x20]에 timer_interrupt 함수 포인터를 저장합니다.
+
+static void register_handler (uint8_t vec_no, int dpl, enum intr_level level,
 		intr_handler_func *handler, const char *name) {
 	ASSERT (intr_handlers[vec_no] == NULL);
 	if (level == INTR_ON) {
@@ -224,8 +227,10 @@ register_handler (uint8_t vec_no, int dpl, enum intr_level level,
 /* Registers external interrupt VEC_NO to invoke HANDLER, which
    is named NAME for debugging purposes.  The handler will
    execute with interrupts disabled. */
-void
-intr_register_ext (uint8_t vec_no, intr_handler_func *handler,
+
+//하드웨어 장치가 보내는 인터럽트, timer.c timer_init 함수에서 호출
+
+void intr_register_ext (uint8_t vec_no, intr_handler_func *handler,
 		const char *name) {
 	ASSERT (vec_no >= 0x20 && vec_no <= 0x2f);
 	register_handler (vec_no, 0, INTR_OFF, handler, name);
@@ -243,9 +248,11 @@ intr_register_ext (uint8_t vec_no, intr_handler_func *handler,
    still cause interrupts with DPL==0 to be invoked.  See
    [IA32-v3a] sections 4.5 "Privilege Levels" and 4.8.1.1
    "Accessing Nonconforming Code Segments" for further
-   discussion. */
-void
-intr_register_int (uint8_t vec_no, int dpl, enum intr_level level,
+   discussion. 
+*/
+
+
+void intr_register_int (uint8_t vec_no, int dpl, enum intr_level level,
 		intr_handler_func *handler, const char *name)
 {
 	ASSERT (vec_no < 0x20 || vec_no > 0x2f);
@@ -343,8 +350,8 @@ intr_handler (struct intr_frame *frame) {
 		ASSERT (!intr_context ());
 
 		in_external_intr = true;
-		yield_on_return = false;
 	}
+	yield_on_return = false;
 
 	/* Invoke the interrupt's handler. */
 	handler = intr_handlers[frame->vec_no];
