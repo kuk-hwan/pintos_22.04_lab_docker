@@ -207,6 +207,10 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
+	if (t->priority > thread_current()->priority) {
+		thread_yield();
+	}
+
 	return tid;
 }
 
@@ -222,6 +226,17 @@ thread_block (void) {
 	ASSERT (intr_get_level () == INTR_OFF);
 	thread_current ()->status = THREAD_BLOCKED;
 	schedule ();
+}
+
+static bool
+thread_priority_more (const struct list_elem *a,
+						const struct list_elem *b,
+						void *aux UNUSED)
+{
+	const struct thread *ta = list_entry(a, struct thread, elem);
+	const struct thread *tb = list_entry(b, struct thread, elem);
+
+	return ta->priority > tb->priority;
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -240,7 +255,8 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
+	list_insert_ordered(&ready_list, &t->elem,
+						thread_priority_more, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
 }
@@ -302,8 +318,12 @@ thread_yield (void) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
-	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
+
+	if (curr != idle_thread) {
+		list_insert_ordered (&ready_list, &curr->elem,
+							thread_priority_more, NULL);
+	}
+
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -311,7 +331,34 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
+    struct thread *current = thread_current();
+    struct thread *highest;
+    enum intr_level old_level;
+
+    // 1. 인터럽트 비활성화 및 기존 상태 저장
+    old_level = intr_disable();
+
+    // 2. 현재 스레드의 우선순위 변경
+    current->priority = new_priority;
+
+    // 3. READY 리스트가 비어 있지 않다면
+    if (!list_empty(&ready_list)) {
+
+        // 4. READY 리스트의 맨 앞 스레드 가져오기
+        highest = list_entry(
+            list_front(&ready_list),
+            struct thread,
+            elem
+        );
+
+        // 5. READY 스레드의 우선순위가 더 높다면 CPU 양보
+        if (highest->priority > current->priority) {
+            thread_yield();
+        }
+    }
+
+    // 6. 인터럽트 상태 복구
+    intr_set_level(old_level);
 }
 
 /* Returns the current thread's priority. */
