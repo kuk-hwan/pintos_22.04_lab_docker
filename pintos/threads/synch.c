@@ -125,6 +125,7 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
+
 	if (!list_empty (&sema->waiters)) {
 
 		/* 우선순위가 높은 스레드를 앞쪽으로 정렬 */
@@ -142,7 +143,7 @@ sema_up (struct semaphore *sema) {
 		if (woken->priority > thread_current ()->priority)
 			need_yield = true;
 	}
-
+  
 	sema->value++;
 	intr_set_level (old_level);
 
