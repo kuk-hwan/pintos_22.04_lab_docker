@@ -48,7 +48,7 @@ timer_init (void) {
 	outb (0x43, 0x34);    /* CW: counter 0, LSB then MSB, mode 2, binary. */
 	outb (0x40, count & 0xff);
 	outb (0x40, count >> 8);
-
+	list_init (&sleep_list);
 	intr_register_ext(0x20, timer_interrupt, "8254 Timer");
 }
 
@@ -97,6 +97,15 @@ timer_elapsed(int64_t then) {
 	return timer_ticks() - then;
 }
 
+static list_less_func promiseF;
+
+bool promiseF (const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+	struct thread *ta = list_entry (a, struct thread, elem);
+	struct thread *tb = list_entry (b, struct thread, elem);
+	return ta->wakeup_tick < tb->wakeup_tick;
+}
+
 /* Suspends execution for approximately TICKS timer ticks. */
 void timer_sleep (int64_t ticks) {
 	if (ticks == 0 || ticks < 0) return;
@@ -105,7 +114,7 @@ void timer_sleep (int64_t ticks) {
 	enum intr_level old_level = intr_disable ();
 	struct thread * cur = thread_current(); 			//현제 스레드 
 	cur->wakeup_tick = ticks + start;                    // 언제 깨울지 기록
-	list_push_front (&sleep_list, &cur->elem); 			// 나를 찾을 수 있게 등록
+	list_insert_ordered(&sleep_list, &cur->elem, promiseF, NULL); 		// 나를 찾을 수 있게 등록
 	thread_block ();                                   // 그 다음에 잠들기
 	intr_set_level (old_level);                        // 깨어나면 여기부터 실행
 
@@ -142,11 +151,16 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-	for (int i = 0; i < sleep_list.count; i++)
-	{
-				
+
+	/* sleep_list는 wakeup_tick 오름차순이므로 앞에서부터만 확인 */
+	while (!list_empty (&sleep_list)) {
+		struct thread *t = list_entry (list_front (&sleep_list),struct thread, elem);
+		if (t->wakeup_tick > ticks)
+			break;                       // 맨 앞이 아직이면 뒤는 볼 필요 없음
+		list_pop_front (&sleep_list);    // 먼저 sleep_list에서 빼고
+		thread_unblock (t);              // 그다음 ready_list로
 	}
-	list_remove(sleep_list);
+
 	thread_tick ();
 }
 
