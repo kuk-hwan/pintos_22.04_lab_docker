@@ -108,7 +108,7 @@ struct thread {
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
 
-	int wakeupTime;
+	int wakeup_tick;
 };
 
 /* If false (default), use round-robin scheduler.

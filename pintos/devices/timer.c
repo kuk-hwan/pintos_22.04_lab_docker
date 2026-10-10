@@ -34,6 +34,8 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
+static struct list sleep_list;
+
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
@@ -84,7 +86,7 @@ timer_ticks (void) {
 	//t에 ticks 복사, 인터럽트를 껐으므로 변할 수 없음
 	int64_t t = ticks;
 	intr_set_level(old_level);
-	barrier();
+	barrier(); //수정 안하고 계속 쓰는 변수는 레지스터에 추가하기 때문에 베리어로 강제로 메모리를 참조하도록 바꿈
 	return t;
 }
 
@@ -99,6 +101,13 @@ timer_elapsed(int64_t then) {
 void timer_sleep (int64_t ticks) {
 	if (ticks == 0 || ticks < 0) return;
 	int64_t start = timer_ticks ();
+
+	enum intr_level old_level = intr_disable ();
+	struct thread * cur = thread_current(); 			//현제 스레드 
+	cur->wakeup_tick = ticks + start;                    // 언제 깨울지 기록
+	list_push_front (&sleep_list, &cur->elem); 			// 나를 찾을 수 있게 등록
+	thread_block ();                                   // 그 다음에 잠들기
+	intr_set_level (old_level);                        // 깨어나면 여기부터 실행
 
 	ASSERT (intr_get_level () == INTR_ON);
 	while (timer_elapsed(start) < ticks)
@@ -133,6 +142,11 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+	for (int i = 0; i < sleep_list.count; i++)
+	{
+				
+	}
+	list_remove(sleep_list);
 	thread_tick ();
 }
 
