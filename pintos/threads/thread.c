@@ -432,33 +432,51 @@ thread_set_priority (int new_priority) {
 		return;
 	}
     struct thread *current = thread_current();
+	struct list_elem *e;
     struct thread *highest;
     enum intr_level old_level;
+	int effective_priority = new_priority;
+	bool need_yield = false;
 
     // 1. 인터럽트 비활성화 및 기존 상태 저장
     old_level = intr_disable();
 
     // 2. 현재 스레드의 우선순위 변경
-    current->priority = new_priority;
+    current->base_priority = new_priority;
+
+	/* 남아 있는 기부를 모두 반영 */
+	for (e = list_begin (&current->donations);
+		 e != list_end (&current->donations);
+		 e = list_next (e)) {
+
+		struct thread *donor =
+			list_entry (e, struct thread, donation_elem);
+
+		if (donor->priority > effective_priority)
+			effective_priority = donor->priority;
+	}
+
+	current->priority = effective_priority;
 
     // 3. READY 리스트가 비어 있지 않다면
     if (!list_empty(&ready_list)) {
+		list_sort (&ready_list, thread_priority_more, NULL);
 
-        // 4. READY 리스트의 맨 앞 스레드 가져오기
-        highest = list_entry(
-            list_front(&ready_list),
-            struct thread,
-            elem
-        );
+		highest = list_entry (
+			list_front (&ready_list),
+			struct thread,
+			elem
+		);
 
-        // 5. READY 스레드의 우선순위가 더 높다면 CPU 양보
-        if (highest->priority > current->priority) {
-            thread_yield();
-        }
-    }
+		if (highest->priority > current->priority)
+			need_yield = true;
+	}
 
-    // 6. 인터럽트 상태 복구
-    intr_set_level(old_level);
+	intr_set_level (old_level);
+
+	/* 우선순위 변경 뒤 스케줄러에게 CPU 양보 */
+	if (need_yield)
+		thread_yield ();
 }
 
 /* Returns the current thread's priority. */
@@ -593,6 +611,8 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->priority = priority;
 	t->base_priority = priority;
 	t->waiting_lock = NULL;
+
+	list_init (&t->donations);
 	t->magic = THREAD_MAGIC;
 	t->wakeup_tick = 0;
 
