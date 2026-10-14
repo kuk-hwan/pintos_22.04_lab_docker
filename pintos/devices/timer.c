@@ -161,16 +161,26 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 
+	struct thread *cur = thread_current ();   // 인터럽트당한 스레드
+	bool need_yield = false;
+
 	/* sleep_list는 wakeup_tick 오름차순이므로 앞에서부터만 확인 */
 	while (!list_empty (&sleep_list)) {
-		struct thread *t = list_entry (list_front (&sleep_list),struct thread, elem);
+		struct thread *t = list_entry (list_front (&sleep_list), struct thread, elem);
 		if (t->wakeup_tick > ticks)
-			break;                       // 맨 앞이 아직이면 뒤는 볼 필요 없음
-		list_pop_front (&sleep_list);    // 먼저 sleep_list에서 빼고
-		thread_unblock (t);              // 그다음 ready_list로
+			break;
+		list_pop_front (&sleep_list);
+		thread_unblock (t);                    // ready_list에 priority 순으로 삽입
+
+		/* 핸들러 안에서는 thread_yield() 불가 → 끝나고 양보하도록 예약만 */
+		if (t->priority > cur->priority)
+			need_yield = true;
 	}
 
 	thread_tick ();
+
+	if (need_yield)
+		intr_yield_on_return ();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
