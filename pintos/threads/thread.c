@@ -627,13 +627,23 @@ init_thread (struct thread *t, const char *name, int priority) {
    empty.  (If the running thread can continue running, then it
    will be in the run queue.)  If the run queue is empty, return
    idle_thread. */
+/* list_max용: a < b 이면 true */
+static bool
+thread_priority_less (const struct list_elem *a,
+                      const struct list_elem *b, void *aux UNUSED) {
+	return list_entry (a, struct thread, elem)->priority
+	     < list_entry (b, struct thread, elem)->priority;
+}
+
 static struct thread *
 next_thread_to_run (void) {
 	if (list_empty (&ready_list))
 		return idle_thread;
-	else
-		return list_entry (list_pop_front (&ready_list),
-						   struct thread, elem);
+
+	/* 최댓값이 여러 개면 list_max는 앞쪽(먼저 들어온) 원소를 반환 → FIFO 유지 */
+	struct list_elem *e = list_max (&ready_list, thread_priority_less, NULL);
+	list_remove (e);
+	return list_entry (e, struct thread, elem);
 }
 
 /* Use iretq to launch the thread */
